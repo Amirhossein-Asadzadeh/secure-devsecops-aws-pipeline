@@ -1,13 +1,13 @@
-import os
 import logging
+import os
 import time
 
 from flask import Flask, jsonify, request
 from prometheus_client import (
+    CONTENT_TYPE_LATEST,
     Counter,
     Histogram,
     generate_latest,
-    CONTENT_TYPE_LATEST,
 )
 
 logging.basicConfig(

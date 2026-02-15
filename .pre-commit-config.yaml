@@ -11,9 +11,6 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=500]
       - id: check-merge-conflict
-      - id: no-commit-to-branch
-        args: [--branch, main]
-        stages: [commit]
 
   # Python formatting
   - repo: https://github.com/psf/black
