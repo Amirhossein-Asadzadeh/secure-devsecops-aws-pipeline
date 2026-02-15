@@ -1,10 +1,10 @@
+import os
+import sys
+
 import pytest
 
-import sys
-import os
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from main import app
+from main import app  # noqa: E402
 
 
 @pytest.fixture
