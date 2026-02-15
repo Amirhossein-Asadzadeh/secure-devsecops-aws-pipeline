@@ -173,6 +173,7 @@ jobs:
         with:
           working_directory: terraform
           soft_fail: false
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
   # -------------------------------------------------------------------
   # 5. OPA policy check on K8s manifests
