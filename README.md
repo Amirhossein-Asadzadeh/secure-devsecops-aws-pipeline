@@ -1,40 +1,59 @@
 # Secure DevSecOps AWS Pipeline
 
+[![CI Pipeline](https://github.com/Amirhossein-Asadzadeh/secure-devsecops-aws-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/Amirhossein-Asadzadeh/secure-devsecops-aws-pipeline/actions/workflows/ci.yml)
+[![Security: Trivy](https://img.shields.io/badge/security-Trivy-blue?logo=aquasecurity)](https://github.com/Amirhossein-Asadzadeh/secure-devsecops-aws-pipeline/actions/workflows/ci.yml)
+[![Security: Checkov](https://img.shields.io/badge/policy--as--code-Checkov-blueviolet?logo=paloaltonetworks)](https://github.com/Amirhossein-Asadzadeh/secure-devsecops-aws-pipeline/actions/workflows/ci.yml)
+[![SAST: Bandit](https://img.shields.io/badge/SAST-Bandit-yellow?logo=python)](https://github.com/Amirhossein-Asadzadeh/secure-devsecops-aws-pipeline/actions/workflows/ci.yml)
+[![IaC: Terraform](https://img.shields.io/badge/IaC-Terraform-623CE4?logo=terraform)](https://github.com/Amirhossein-Asadzadeh/secure-devsecops-aws-pipeline/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Production-grade DevSecOps pipeline that automates the entire software delivery lifecycle — from code commit to production deployment — with security scanning, infrastructure as code, and observability built in.
 
 ## Architecture
 
-```
-┌─────────┐     ┌──────────────────────────────────────────────────────────────┐
-│  git    │     │                    CI Pipeline                              │
-│  push   │────▶│  Lint → Test → SAST (Bandit) → Build → Trivy Scan → ECR   │
-└─────────┘     └──────────────────────────────┬───────────────────────────────┘
-                                               │
-                                               ▼
-                ┌──────────────────────────────────────────────────────────────┐
-                │                    CD Pipeline                              │
-                │  ECR → Update Task Def → Deploy ECS → Smoke Test           │
-                └──────────────────────────────┬───────────────────────────────┘
-                                               │
-                                               ▼
-                ┌──────────────────────────────────────────────────────────────┐
-                │                    AWS Infrastructure                       │
-                │                                                              │
-                │  ┌─────────────────────────────────────────────────────┐    │
-                │  │  VPC (10.0.0.0/16)                                  │    │
-                │  │                                                      │    │
-                │  │  ┌──────────────┐    ┌───────────────────────────┐  │    │
-                │  │  │ Public       │    │ Private                    │  │    │
-                │  │  │              │    │                             │  │    │
-                │  │  │  ┌───────┐  │    │  ┌─────────┐  ┌────────┐  │  │    │
-                │  │  │  │  ALB  │──┼────┼─▶│   ECS   │──│  RDS   │  │  │    │
-                │  │  │  └───────┘  │    │  │ Fargate │  │ Postgres│  │  │    │
-                │  │  │             │    │  └─────────┘  └────────┘  │  │    │
-                │  │  └──────────────┘    └───────────────────────────┘  │    │
-                │  └─────────────────────────────────────────────────────┘    │
-                │                                                              │
-                │  Prometheus ─── Grafana ─── CloudWatch ─── Alertmanager     │
-                └──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    Dev["Developer"] -->|git push| GH["GitHub"]
+
+    subgraph CI ["CI Pipeline"]
+        direction LR
+        Lint["Pre-commit\nLint & Test"] --> SAST["SAST\nBandit"]
+        SAST --> Build["Build &\nTrivy Scan"]
+        Build --> Checkov["Checkov\nPolicy Scan"]
+        Checkov --> OPA["OPA\nK8s Policy"]
+        Build --> SBOM["SBOM\nGeneration"]
+    end
+
+    subgraph CD ["CD Pipeline"]
+        direction LR
+        ECR["ECR Push"] --> TaskDef["Update\nTask Def"] --> Deploy["Deploy\nECS"] --> Smoke["Smoke\nTest"]
+    end
+
+    subgraph AWS ["AWS Infrastructure"]
+        subgraph VPC ["VPC (10.0.0.0/16)"]
+            subgraph Public ["Public Subnets"]
+                ALB["ALB"]
+            end
+            subgraph Private ["Private Subnets"]
+                ECS["ECS Fargate"]
+                RDS["RDS\nPostgreSQL"]
+            end
+        end
+        CW["CloudWatch"]
+    end
+
+    subgraph Monitoring
+        Prometheus --> Grafana
+        Prometheus --> Alertmanager
+    end
+
+    GH --> CI
+    CI --> CD
+    CD --> ECR
+    ALB --> ECS
+    ECS --> RDS
+    ECS --> CW
+    ECS --> Prometheus
 ```
 
 ## Tech Stack
