@@ -121,6 +121,28 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: devsecops-app:${{ github.sha }}
+          format: spdx-json
+          output-file: sbom-spdx.json
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: devsecops-app:${{ github.sha }}
+          format: cyclonedx-json
+          output-file: sbom-cyclonedx.json
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-reports
+          path: |
+            sbom-spdx.json
+            sbom-cyclonedx.json
+
   # -------------------------------------------------------------------
   # 4. Infrastructure validation
   # -------------------------------------------------------------------
