@@ -1,0 +1,75 @@
+metadata:
+  name: "DevSecOps Custom Policies"
+  guidelines: "https://github.com/Amirhossein-Asadzadeh/secure-devsecops-aws-pipeline/docs/branch-strategy.md"
+
+definition:
+  # -----------------------------------------------------------------------
+  # Ensure RDS instances have deletion protection enabled
+  # -----------------------------------------------------------------------
+  - metadata:
+      id: "CUSTOM_AWS_001"
+      name: "Ensure RDS deletion protection is enabled"
+      category: "GENERAL_SECURITY"
+      severity: "HIGH"
+    scope:
+      provider: "aws"
+    definition:
+      cond_type: "attribute"
+      resource_types:
+        - "aws_db_instance"
+      attribute: "deletion_protection"
+      operator: "is_true"
+
+  # -----------------------------------------------------------------------
+  # Ensure ECS tasks use Fargate launch type
+  # -----------------------------------------------------------------------
+  - metadata:
+      id: "CUSTOM_AWS_002"
+      name: "Ensure ECS tasks use Fargate for serverless compute"
+      category: "GENERAL_SECURITY"
+      severity: "MEDIUM"
+    scope:
+      provider: "aws"
+    definition:
+      cond_type: "attribute"
+      resource_types:
+        - "aws_ecs_task_definition"
+      attribute: "requires_compatibilities"
+      operator: "contains"
+      value: "FARGATE"
+
+  # -----------------------------------------------------------------------
+  # Ensure ECR repositories have immutable tags
+  # -----------------------------------------------------------------------
+  - metadata:
+      id: "CUSTOM_AWS_003"
+      name: "Ensure ECR image tags are immutable"
+      category: "SUPPLY_CHAIN"
+      severity: "HIGH"
+    scope:
+      provider: "aws"
+    definition:
+      cond_type: "attribute"
+      resource_types:
+        - "aws_ecr_repository"
+      attribute: "image_tag_mutability"
+      operator: "equals"
+      value: "IMMUTABLE"
+
+  # -----------------------------------------------------------------------
+  # Ensure S3 buckets have versioning enabled
+  # -----------------------------------------------------------------------
+  - metadata:
+      id: "CUSTOM_AWS_004"
+      name: "Ensure S3 state bucket has versioning enabled"
+      category: "BACKUP_AND_RECOVERY"
+      severity: "HIGH"
+    scope:
+      provider: "aws"
+    definition:
+      cond_type: "attribute"
+      resource_types:
+        - "aws_s3_bucket_versioning"
+      attribute: "versioning_configuration.status"
+      operator: "equals"
+      value: "Enabled"

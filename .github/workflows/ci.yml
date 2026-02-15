@@ -176,7 +176,32 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   # -------------------------------------------------------------------
-  # 5. OPA policy check on K8s manifests
+  # 5. Checkov — policy-as-code for IaC, Docker, K8s
+  # -------------------------------------------------------------------
+  checkov:
+    name: Checkov Policy Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          config_file: policies/checkov/.checkov.yml
+          output_format: cli,sarif
+          output_file_path: console,checkov-results.sarif
+          soft_fail: false
+
+      - name: Upload Checkov SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-report
+          path: checkov-results.sarif
+
+  # -------------------------------------------------------------------
+  # 6. OPA policy check on K8s manifests
   # -------------------------------------------------------------------
   policy-check:
     name: OPA Policy Check

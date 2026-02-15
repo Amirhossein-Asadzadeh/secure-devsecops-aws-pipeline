@@ -1,0 +1,13 @@
+soft-fail: false
+compact: true
+framework:
+  - terraform
+  - dockerfile
+  - kubernetes
+directory:
+  - .
+external-checks-dir:
+  - policies/checkov
+skip-check:
+  - CKV_TF_1     # Module source not using commit hash (using local modules)
+  - CKV_TF_2     # Module source not using tag (using local modules)
