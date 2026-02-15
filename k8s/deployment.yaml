@@ -37,6 +37,7 @@ spec:
       containers:
         - name: app
           image: AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/devsecops-pipeline-app:v1.0.0
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               protocol: TCP
