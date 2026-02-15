@@ -70,6 +70,10 @@ resource "aws_dynamodb_table" "terraform_lock" {
     type = "S"
   }
 
+  point_in_time_recovery {
+    enabled = true
+  }
+
   tags = {
     Name      = "Terraform Lock"
     ManagedBy = "terraform-bootstrap"

@@ -9,12 +9,24 @@ directory:
 external-checks-dir:
   - policies/checkov
 skip-check:
+  # --- Local modules ---
   - CKV_TF_1     # Module source not using commit hash (local modules)
   - CKV_TF_2     # Module source not using tag (local modules)
-  - CKV_AWS_260  # ALB SG allows ingress on port 80 (intentional — HTTP→HTTPS redirect)
-  - CKV_AWS_382  # SG allows all egress (standard pattern for ECS tasks)
-  - CKV_AWS_23   # SG rule description — descriptions set on ingress blocks
-  - CKV_AWS_158  # CloudWatch KMS encryption (AWS managed encryption sufficient for non-PII logs)
-  - CKV_AWS_338  # CloudWatch 1-year retention (14 days is cost-effective for app logs, not audit)
-  - CKV_AWS_136  # ECR KMS encryption (AES256 server-side encryption is enabled)
-  - CKV_AWS_119  # DynamoDB KMS CMK (AWS managed encryption sufficient for state lock table)
+  # --- Networking (intentional for public-facing ALB) ---
+  - CKV_AWS_260  # ALB SG allows ingress on port 80 (HTTP→HTTPS redirect)
+  - CKV_AWS_382  # SG allows all egress (standard for ECS tasks needing ECR/S3/logs)
+  - CKV_AWS_23   # SG rule description (descriptions on ingress blocks, not egress)
+  - CKV_AWS_130  # Public subnets assign public IPs (required for ALB placement)
+  # --- Encryption: AWS managed sufficient, KMS CMK adds cost with no compliance mandate ---
+  - CKV_AWS_158  # CloudWatch Log Group KMS
+  - CKV_AWS_136  # ECR repository KMS (AES256 enabled)
+  - CKV_AWS_119  # DynamoDB KMS CMK
+  - CKV_AWS_354  # RDS Performance Insights KMS CMK
+  # --- Retention & monitoring trade-offs ---
+  - CKV_AWS_338  # CloudWatch 1-year retention (14d for app logs; audit logs separate)
+  - CKV_AWS_118  # RDS enhanced monitoring (adds cost; CloudWatch metrics sufficient)
+  # --- ALB access logging (requires dedicated S3 bucket + policy) ---
+  - CKV_AWS_91   # ALB access logging (planned for production; omitted to reduce scope)
+  # --- IAM: GitHub Actions deploy role needs broad ECS/ECR permissions ---
+  - CKV_AWS_290  # IAM write access constraints (ECR push + ECS deploy require it)
+  - CKV_AWS_355  # IAM wildcard resource (ecr:GetAuthorizationToken requires Resource: *)
