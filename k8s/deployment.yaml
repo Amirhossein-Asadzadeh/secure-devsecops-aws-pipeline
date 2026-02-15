@@ -27,13 +27,16 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: devsecops-app
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 10000
+        fsGroup: 10000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: app
-          image: AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/devsecops-pipeline-app:latest
+          image: AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/devsecops-pipeline-app:v1.0.0
           ports:
             - containerPort: 8080
               protocol: TCP
