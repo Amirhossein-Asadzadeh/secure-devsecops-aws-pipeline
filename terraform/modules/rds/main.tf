@@ -71,9 +71,10 @@ resource "aws_db_instance" "main" {
   backup_window           = "03:00-04:00"
   maintenance_window      = "sun:04:00-sun:05:00"
 
-  auto_minor_version_upgrade      = true
+  auto_minor_version_upgrade          = true
   iam_database_authentication_enabled = true
-  performance_insights_enabled    = true
+  performance_insights_enabled        = true
+  copy_tags_to_snapshot               = true
 
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
 
