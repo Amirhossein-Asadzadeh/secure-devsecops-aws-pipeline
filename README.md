@@ -337,6 +337,81 @@ The CD pipeline sets this automatically for ECS. For EKS, you can use `envsubst`
 
 ---
 
+## Database Migrations
+
+Schema changes are managed through versioned SQL files in [app/migrations/](app/migrations/).
+The migration runner is **idempotent** — re-running it is always safe.
+
+### How it works
+
+| File | Purpose |
+|---|---|
+| `app/migrations/migrate.py` | Migration runner script |
+| `app/migrations/*.sql` | Numbered SQL files applied in filename order |
+
+The runner maintains a `schema_migrations` table in the database that records which versions have been applied. On each run it skips files already present in that table and applies only new ones.
+
+### Running migrations
+
+Set the same environment variables used by the application, then run:
+
+```bash
+# Export connection details (or put them in a .env file)
+export DB_HOST=your-rds-endpoint.us-east-1.rds.amazonaws.com
+export DB_NAME=appdb
+export DB_USER=appuser
+export DB_PASSWORD=your-password   # retrieve from AWS Secrets Manager
+
+python app/migrations/migrate.py
+```
+
+Example output on a fresh database:
+
+```
+2026-02-18 10:00:00 [INFO] Connecting to your-rds-endpoint:5432/appdb
+2026-02-18 10:00:00 [INFO] APPLY 001_initial_schema
+2026-02-18 10:00:01 [INFO] OK    001_initial_schema
+2026-02-18 10:00:01 [INFO] Applied 1 migration(s) successfully
+```
+
+Re-running on an already-migrated database:
+
+```
+2026-02-18 10:05:00 [INFO] SKIP  001_initial_schema (already applied)
+2026-02-18 10:05:00 [INFO] Nothing to do — database is up to date
+```
+
+### Adding a new migration
+
+1. Create a new file following the naming convention:
+   ```
+   app/migrations/002_add_description_column.sql
+   ```
+2. Write idempotent SQL (use `IF NOT EXISTS` / `IF EXISTS` guards):
+   ```sql
+   ALTER TABLE items ADD COLUMN IF NOT EXISTS description TEXT;
+   ```
+3. Run `python app/migrations/migrate.py` — only the new file will be applied.
+
+### Production deployment order
+
+Always run migrations **before** deploying a new application version so the schema is in place when the new code starts:
+
+```
+1. terraform apply          ← infrastructure changes (if any)
+2. python migrate.py        ← schema changes
+3. CD pipeline deploys app  ← new application version
+```
+
+> **Tip:** Retrieve the RDS password from AWS Secrets Manager before running migrations:
+> ```bash
+> export DB_PASSWORD=$(aws secretsmanager get-secret-value \
+>   --secret-id devsecops-pipeline/rds-password \
+>   --query SecretString --output text | jq -r .password)
+> ```
+
+---
+
 ## Production Considerations
 
 - **State management** — Terraform state stored in S3 with DynamoDB locking and encryption
