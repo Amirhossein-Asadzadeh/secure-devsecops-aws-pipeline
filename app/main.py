@@ -2,13 +2,17 @@ import logging
 import os
 import time
 
-from flask import Flask, jsonify, request
+import psycopg2
+from dotenv import load_dotenv
+from flask import Flask, g, jsonify, request
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
     Histogram,
     generate_latest,
 )
+
+load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,6 +58,62 @@ def _record_metrics(response):
 
 
 # ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
+def _db_params() -> dict:
+    return {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "dbname": os.getenv("DB_NAME", "appdb"),
+        "user": os.getenv("DB_USER", "appuser"),
+        "password": os.getenv("DB_PASSWORD"),
+        "port": int(os.getenv("DB_PORT", "5432")),
+        "connect_timeout": 5,
+    }
+
+
+def get_db():
+    """Return a per-request psycopg2 connection, creating it on first call."""
+    if "db" not in g:
+        g.db = psycopg2.connect(**_db_params())
+    return g.db
+
+
+@app.teardown_appcontext
+def close_db(exc=None):
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
+
+
+def init_db():
+    """Create the items table if it does not exist.
+
+    Skipped silently when DB_HOST is not set (e.g. local dev without Docker).
+    """
+    if not os.getenv("DB_HOST"):
+        logger.info("DB_HOST not set — skipping database initialisation")
+        return
+    try:
+        conn = psycopg2.connect(**_db_params())
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS items (
+                    id         SERIAL PRIMARY KEY,
+                    name       VARCHAR(255) NOT NULL,
+                    status     VARCHAR(50)  NOT NULL DEFAULT 'active',
+                    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+        conn.commit()
+        conn.close()
+        logger.info("Database initialised successfully")
+    except Exception:
+        logger.exception("Failed to initialise database — app will start without DB")
+
+
+# ---------------------------------------------------------------------------
 # Application routes
 # ---------------------------------------------------------------------------
 @app.route("/health", methods=["GET"])
@@ -63,12 +123,17 @@ def health():
 
 @app.route("/api/v1/items", methods=["GET"])
 def list_items():
-    items = [
-        {"id": 1, "name": "Secure Pipeline", "status": "active"},
-        {"id": 2, "name": "Cloud Deploy", "status": "active"},
-    ]
-    logger.info("Listed %d items", len(items))
-    return jsonify({"items": items, "count": len(items)})
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, status FROM items ORDER BY id")
+            rows = cur.fetchall()
+        items = [{"id": r[0], "name": r[1], "status": r[2]} for r in rows]
+        logger.info("Listed %d items", len(items))
+        return jsonify({"items": items, "count": len(items)})
+    except Exception:
+        logger.exception("Failed to list items")
+        return jsonify({"error": "database error"}), 503
 
 
 @app.route("/api/v1/items", methods=["POST"])
@@ -76,9 +141,21 @@ def create_item():
     data = request.get_json(silent=True)
     if not data or "name" not in data:
         return jsonify({"error": "name is required"}), 400
-    item = {"id": 3, "name": data["name"], "status": "created"}
-    logger.info("Created item: %s", item["name"])
-    return jsonify(item), 201
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO items (name, status) VALUES (%s, %s) RETURNING id, name, status",
+                (data["name"], data.get("status", "active")),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        item = {"id": row[0], "name": row[1], "status": row[2]}
+        logger.info("Created item: %s", item["name"])
+        return jsonify(item), 201
+    except Exception:
+        logger.exception("Failed to create item")
+        return jsonify({"error": "database error"}), 503
 
 
 @app.route("/metrics", methods=["GET"])
@@ -87,8 +164,10 @@ def metrics():
 
 
 # ---------------------------------------------------------------------------
-# Entrypoint
+# Startup
 # ---------------------------------------------------------------------------
+init_db()
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
