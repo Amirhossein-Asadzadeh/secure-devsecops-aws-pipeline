@@ -177,6 +177,166 @@ terraform init
 terraform plan -var="container_image=devsecops-app:latest" -var="db_username=admin"
 ```
 
+## Production Deployment Prerequisites
+
+Before running the CD pipeline against a real AWS account, several one-time steps require **manual setup**. The table below separates what the automation handles from what you must configure yourself.
+
+| Step | Automated | Manual |
+|---|---|---|
+| VPC, ECS, RDS, IAM provisioning | Terraform | — |
+| Docker build, scan, push to ECR | GitHub Actions | — |
+| ECS rolling deploy + smoke test | GitHub Actions | — |
+| TLS certificate issuance | — | ACM (see below) |
+| ALB HTTPS listener | — | Terraform variable (see below) |
+| DNS record pointing to ALB | — | Your DNS provider |
+| K8s Ingress domain name | — | Edit `k8s/ingress.yaml` |
+| GitHub Actions AWS credentials | — | GitHub repo secret |
+| Terraform bootstrap (S3 + DynamoDB) | — | Run once manually |
+
+---
+
+### 1. Bootstrap Terraform Remote State
+
+Run this **once** before any other Terraform commands:
+
+```bash
+cd terraform/bootstrap
+terraform init
+terraform apply
+```
+
+This creates the S3 state bucket (`devsecops-pipeline-tfstate`) and DynamoDB lock table (`terraform-lock`).
+
+---
+
+### 2. Configure GitHub Actions AWS Credentials (OIDC)
+
+The CD pipeline authenticates to AWS via OIDC — no long-lived access keys are stored.
+
+**Step 1 — Deploy the IAM OIDC role** (done by `terraform/modules/iam`):
+
+```bash
+cd terraform/environments/dev   # or prod
+terraform init
+terraform apply
+# note the github_actions_role_arn output value
+```
+
+**Step 2 — Add the role ARN to GitHub:**
+
+1. Go to your repository → **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Name: `AWS_ROLE_ARN`
+4. Value: the `github_actions_role_arn` output from step 1
+
+The CD pipeline (`cd.yml`) references this secret automatically. No other AWS credentials are needed.
+
+---
+
+### 3. Request a TLS Certificate via ACM
+
+AWS Certificate Manager (ACM) issues free TLS certificates that integrate directly with the ALB.
+
+```bash
+# Request a certificate for your domain
+aws acm request-certificate \
+  --domain-name api.yourdomain.com \
+  --validation-method DNS \
+  --region us-east-1
+```
+
+**Validate via DNS** (recommended — no email required):
+
+```bash
+# Retrieve the CNAME record ACM needs you to add
+aws acm describe-certificate \
+  --certificate-arn arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID \
+  --query "Certificate.DomainValidationOptions[0].ResourceRecord"
+```
+
+Add the returned `Name` → `Value` CNAME record in your DNS provider. ACM will issue the certificate automatically once DNS propagates (typically 5–30 minutes).
+
+> **Alternative:** Use `--validation-method EMAIL` if you control the domain's admin/postmaster/webmaster inbox. ACM sends a confirmation link.
+
+---
+
+### 4. Add the HTTPS Listener to the ALB
+
+Pass the certificate ARN as a Terraform variable to enable the HTTPS listener on the ALB:
+
+```bash
+# terraform/environments/dev/terraform.tfvars
+acm_certificate_arn = "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID"
+```
+
+Then re-apply Terraform:
+
+```bash
+cd terraform/environments/dev
+terraform apply
+```
+
+The ECS module will create an ALB listener on port 443 using the certificate. The existing HTTP listener already redirects to HTTPS (301).
+
+---
+
+### 5. Configure DNS to Point to the ALB
+
+After Terraform apply, retrieve the ALB DNS name:
+
+```bash
+terraform -chdir=terraform/environments/dev output alb_dns_name
+# e.g. devsecops-pipeline-alb-123456789.us-east-1.elb.amazonaws.com
+```
+
+In your DNS provider, create a **CNAME** record:
+
+```
+api.yourdomain.com  →  devsecops-pipeline-alb-123456789.us-east-1.elb.amazonaws.com
+```
+
+> If your DNS provider supports **ALIAS** records (e.g. Route 53), use an ALIAS instead of CNAME for the zone apex (`yourdomain.com`).
+
+---
+
+### 6. Update the Kubernetes Ingress (EKS deployments only)
+
+If deploying to EKS rather than ECS, update two placeholders in [k8s/ingress.yaml](k8s/ingress.yaml):
+
+```yaml
+# Replace the placeholder host
+spec:
+  rules:
+    - host: api.yourdomain.com   # ← your actual domain
+
+# Add the TLS secret name (from cert-manager or manual secret)
+  tls:
+    - hosts:
+        - api.yourdomain.com
+      secretName: devsecops-app-tls  # ← name of the K8s TLS secret
+```
+
+If using **cert-manager**, annotate the Ingress instead of specifying a secret manually:
+
+```yaml
+annotations:
+  cert-manager.io/cluster-issuer: letsencrypt-prod
+```
+
+---
+
+### 7. Update the Kubernetes Deployment Image (EKS deployments only)
+
+Replace the placeholder in [k8s/deployment.yaml](k8s/deployment.yaml) with your actual ECR registry:
+
+```yaml
+image: <YOUR_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/devsecops-pipeline-app:<TAG>
+```
+
+The CD pipeline sets this automatically for ECS. For EKS, you can use `envsubst` or Helm values to inject the correct image at deploy time.
+
+---
+
 ## Production Considerations
 
 - **State management** — Terraform state stored in S3 with DynamoDB locking and encryption
