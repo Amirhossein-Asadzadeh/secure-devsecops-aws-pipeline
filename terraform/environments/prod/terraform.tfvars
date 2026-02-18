@@ -10,3 +10,8 @@ task_memory        = 1024
 desired_count      = 3
 db_instance_class  = "db.t3.small"
 db_name            = "appdb"
+
+# One NAT gateway per AZ for high availability.
+# Eliminates cross-AZ NAT traffic costs and removes the NAT as a
+# single point of failure. Required for a production-grade deployment.
+enable_multi_az_nat = true

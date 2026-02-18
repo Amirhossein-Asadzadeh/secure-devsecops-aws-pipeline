@@ -10,3 +10,9 @@ task_memory        = 512
 desired_count      = 1
 db_instance_class  = "db.t3.micro"
 db_name            = "appdb"
+
+# Single NAT gateway intentionally kept for dev to minimise cost.
+# A NAT gateway costs ~$32/month plus ~$0.045/GB data processed.
+# Dev traffic is low and AZ-level HA is not required outside production.
+# Set to true only if you need to test multi-AZ routing locally.
+enable_multi_az_nat = false

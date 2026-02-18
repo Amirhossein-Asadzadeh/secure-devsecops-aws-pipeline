@@ -61,3 +61,9 @@ variable "db_username" {
   type      = string
   sensitive = true
 }
+
+variable "enable_multi_az_nat" {
+  type        = bool
+  default     = false
+  description = "Create one NAT gateway per AZ (true) or a single shared NAT (false)."
+}
