@@ -34,12 +34,20 @@ deny contains msg if {
 
 # -----------------------------------------------------------------------
 # Deny images from untrusted registries
+#
+# Trusted registries:
+#   - Any private ECR registry:  {12-digit-account}.dkr.ecr.{region}.amazonaws.com/
+#   - Docker Hub official images: docker.io/library/
 # -----------------------------------------------------------------------
+_trusted_ecr(image) if regex.match(`^\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/`, image)
+
+_trusted_dockerhub(image) if startswith(image, "docker.io/library/")
+
 deny contains msg if {
     input.request.kind.kind == "Deployment"
     container := input.request.object.spec.template.spec.containers[_]
-    not startswith(container.image, "AWS_ACCOUNT_ID.dkr.ecr.")
-    not startswith(container.image, "docker.io/library/")
+    not _trusted_ecr(container.image)
+    not _trusted_dockerhub(container.image)
     msg := sprintf("Container '%s' uses untrusted image registry: %s", [container.name, container.image])
 }
 
